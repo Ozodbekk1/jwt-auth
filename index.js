@@ -24,8 +24,9 @@ mongoose
 // Middleware Connections
 app.use(
   cors({
-    origin: "http://localhost:8080",
-    credentials: true, // cookies allowed
+    origin: ["http://localhost:8080", "http://localhost:3000"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    credentials: true,
   })
 );
 
@@ -46,7 +47,19 @@ app.get("/", (req, res) => {
 });
 
 app.get("/api/protected", verifyAccessToken, (req, res) => {
-  res.json({ message: `Hello ${req.user.email}`, userId: req.user.id });
+  res.status(200).json({
+    success: true,
+    message: {
+      eng: "Access granted. You are authenticated.",
+      rus: "Доступ разрешён. Вы авторизованы.",
+      uzb: "Ruxsat berildi. Siz autentifikatsiyadan o‘tdingiz.",
+    },
+    data: {
+      userId: req.user.id,
+      email: req.user.email,
+      userName: req.user.userName || null,
+    },
+  });
 });
 
 // Connection

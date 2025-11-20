@@ -17,38 +17,109 @@ const COOKIE_OPTIONS = {
 export const register = async (req, res) => {
   try {
     const { email, password, userName } = req.body;
-    if (!email || !password || !userName)
-      return res.status(400).json({ message: "Email and password required" });
+
+    const missingFields = [];
+    if (!email) missingFields.push("email");
+    if (!password) missingFields.push("password");
+    if (!userName) missingFields.push("username");
+
+    if (missingFields.length > 0) {
+      const fieldText = missingFields.join(", ");
+
+      return res.status(400).json({
+        success: false,
+        message: {
+          eng: `The following field(s) are required: ${fieldText}`,
+          rus: `Обязательные поля: ${fieldText}`,
+          uzb: `Quyidagi maydon(lar) talab qilinadi: ${fieldText}`,
+        },
+      });
+    }
 
     const existing = await userModel.findOne({ email });
     if (existing)
-      return res.status(409).json({ message: "User already exists" });
+      return res.status(409).json({
+        message: {
+          eng: "An account with this email already exists.",
+          rus: "Аккаунт с таким email уже зарегистрирован.",
+          uzb: "Bu email bilan allaqachon hisob ochilgan.",
+        },
+      });
 
     const existingUserName = await userModel.findOne({ userName });
     if (existingUserName)
-      return res.status(409).json({ message: "User already exists" });
+      return res.status(409).json({
+        message: {
+          eng: "Username is already taken.",
+          rus: "Такое имя пользователя уже занято.",
+          uzb: "Bu foydalanuvchi nomi band.",
+        },
+      });
 
     const hashed = await bcrypt.hash(password, 10);
     const user = await userModel.create({ email, userName, password: hashed });
 
-    return res.status(201).json({ message: "User created", userId: user._id });
+    return res.status(201).json({
+      message: {
+        eng: "Welcome! Your account has been created successfully.",
+        rus: "Добро пожаловать! Ваш аккаунт успешно создан.",
+        uzb: "Xush kelibsiz! Hisobingiz muvaffaqiyatli yaratildi.",
+      },
+      userId: user._id,
+      data: user,
+    });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({
+      message: {
+        eng: "Oops! Something went wrong on our end. We're working on it!",
+        rus: "Упс! Что-то пошло не так с нашей стороны. Мы уже исправляем!",
+        uzb: "Voy! Biz tomondan xatolik yuz berdi. Hozir tuzatamiz!",
+      },
+    });
   }
 };
 
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password)
-      return res.status(400).json({ message: "Email and password required" });
+
+    const missingFieldsLogin = [];
+    if (!email) missingFieldsLogin.push("email");
+    if (!password) missingFieldsLogin.push("password");
+
+    if (missingFieldsLogin.length > 0) {
+      const fieldText = missingFieldsLogin.join(", ");
+
+      return res.status(400).json({
+        success: false,
+        message: {
+          eng: `The following field(s) are required: ${fieldText}`,
+          rus: `Обязательные поля: ${fieldText}`,
+          uzb: `Quyidagi maydon(lar) talab qilinadi: ${fieldText}`,
+        },
+      });
+    }
 
     const user = await userModel.findOne({ email });
-    if (!user) return res.status(401).json({ message: "Invalid credentials" });
+    if (!user)
+      return res.status(401).json({
+        message: {
+          eng: "Incorrect email.",
+          rus: "Неправильный email.",
+          uzb: "Email xato.",
+        },
+      });
 
     const ok = await bcrypt.compare(password, user.password);
-    if (!ok) return res.status(401).json({ message: "Invalid credentials" });
+    if (!ok)
+      return res.status(401).json({
+        message: {
+          eng: "Incorrect password.",
+          rus: "Неправильный пароль.",
+          uzb: "Parol xato.",
+        },
+      });
 
     const accessToken = generateAccessToken({
       id: user._id,
@@ -68,34 +139,81 @@ export const login = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    return res.json({ message: "Logged in" });
+    return res.status(200).json({
+      message: {
+        eng: "Logged in successfully!",
+        rus: "Вы успешно вошли!",
+        uzb: "Kirish muvaffaqiyatli amalga oshirildi!",
+      },
+      token: accessToken,
+      user: {
+        id: user._id,
+        userName: user.userName,
+        email: user.email,
+        // add any other safe fields you want to send
+      },
+    });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({
+      message: {
+        eng: "Oops! Something went wrong on our end. We're working on it!",
+        rus: "Упс! Что-то пошло не так с нашей стороны. Мы уже исправляем!",
+        uzb: "Voy! Biz tomondan xatolik yuz berdi. Hozir tuzatamiz!",
+      },
+    });
   }
 };
 
 export const refresh = async (req, res) => {
   try {
     const token = req.cookies?.refreshToken;
-    if (!token) return res.status(401).json({ message: "No refresh token" });
+    if (!token)
+      return res.status(401).json({
+        success: false,
+        message: {
+          eng: "Session expired. Please log in again.",
+          rus: "Сессия истекла. Пожалуйста, войдите снова.",
+          uzb: "Sessiya muddati tugadi. Iltimos, qayta kiring.",
+        },
+      });
 
     let payload;
     try {
       payload = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
     } catch (err) {
-      return res
-        .status(403)
-        .json({ message: "Invalid or expired refresh token" });
+      return res.status(403).json({
+        success: false,
+        message: {
+          eng: "No refresh token provided.",
+          rus: "Refresh-токен не предоставлен.",
+          uzb: "Refresh token taqdim etilmagan.",
+        },
+      });
     }
 
     const user = await userModel.findById(payload.id);
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user)
+      return res.status(404).json({
+        success: false,
+        message: {
+          eng: "User not found.",
+          rus: "Пользователь не найден.",
+          uzb: "Foydalanuvchi topilmadi.",
+        },
+      });
 
     if (!user.refreshToken || user.refreshToken !== token) {
       user.refreshToken = null;
       await user.save();
-      return res.status(403).json({ message: "Refresh token does not match" });
+      return res.status(403).json({
+        success: false,
+        message: {
+          eng: "Refresh token does not match user.",
+          rus: "Refresh-токен не соответствует пользователю.",
+          uzb: "Refresh token foydalanuvchiga mos kelmaydi.",
+        },
+      });
     }
 
     const newAccessToken = generateAccessToken({
@@ -116,10 +234,25 @@ export const refresh = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    return res.json({ message: "Tokens refreshed" });
+    return res.status(201).json({
+      success: true,
+      message: {
+        eng: "Tokens refreshed successfully",
+        rus: "Токены успешно обновлены",
+        uzb: "Tokenlar muvaffaqiyatli yangilandi",
+      },
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+    });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({
+      message: {
+        eng: "Oops! Something went wrong on our end. We're working on it!",
+        rus: "Упс! Что-то пошло не так с нашей стороны. Мы уже исправляем!",
+        uzb: "Voy! Biz tomondan xatolik yuz berdi. Hozir tuzatamiz!",
+      },
+    });
   }
 };
 
@@ -142,9 +275,22 @@ export const logout = async (req, res) => {
     res.clearCookie("accessToken", COOKIE_OPTIONS);
     res.clearCookie("refreshToken", COOKIE_OPTIONS);
 
-    return res.json({ message: "Logged out" });
+    return res.json({
+      success: true,
+      message: {
+        eng: "Logged out successfully",
+        rus: "Вы успешно вышли из аккаунта",
+        uzb: "Muvaffaqiyatli chiqish amalga oshirildi",
+      },
+    });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({
+      message: {
+        eng: "Oops! Something went wrong on our end. We're working on it!",
+        rus: "Упс! Что-то пошло не так с нашей стороны. Мы уже исправляем!",
+        uzb: "Voy! Biz tomondan xatolik yuz berdi. Hozir tuzatamiz!",
+      },
+    });
   }
 };
