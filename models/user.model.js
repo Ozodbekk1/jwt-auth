@@ -12,8 +12,10 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
-    userName: { type: String, required: true, unique: true, trim: true },
     password: { type: String, required: true },
+    userName: { type: String, required: true, unique: true, trim: true },
+    avatar: { type: String, default: "" },
+    bio: { type: String, default: "" },
     refreshToken: { type: String, default: null },
   },
   { timestamps: true }

@@ -8,6 +8,8 @@ import mongoose from "mongoose";
 import authRouter from "./routes/auth.route.js";
 import cookieParser from "cookie-parser";
 import { verifyAccessToken } from "./middleware/auth.middleware.js";
+import morgan from "morgan";
+import userRouter from "./routes/user.route.js";
 
 configDotenv();
 
@@ -36,9 +38,23 @@ app.use(cookieParser());
 app.use(express.json());
 app.use(cookieParser());
 
+app.use(
+  morgan(function (tokens, req, res) {
+    return [
+      tokens.method(req, res),
+      tokens.url(req, res),
+      tokens.status(req, res),
+      tokens.res(req, res, "content-length"),
+      "-",
+      tokens["response-time"](req, res),
+      "ms",
+    ].join(" ");
+  })
+);
+
 // Routes
 app.use("/api/v1/auth", authRouter);
-// app.use("/api/v1", userRouter);
+app.use("/api/v1", userRouter);
 // app.use("/api/v1", postRouter);
 // app.use("/api/v1", commentRoute);
 

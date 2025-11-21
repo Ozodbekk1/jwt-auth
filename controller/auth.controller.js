@@ -124,6 +124,7 @@ export const login = async (req, res) => {
     const accessToken = generateAccessToken({
       id: user._id,
       email: user.email,
+      // userName: user.userName,
     });
     const refreshToken = generateRefreshToken({ id: user._id });
 
@@ -150,7 +151,8 @@ export const login = async (req, res) => {
         id: user._id,
         userName: user.userName,
         email: user.email,
-        // add any other safe fields you want to send
+        avatar: user.avatar,
+        bio: user.bio,
       },
     });
   } catch (err) {
