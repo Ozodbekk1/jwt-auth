@@ -2,11 +2,13 @@
 
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import userModel from "../models/user.model.js";
 import {
   generateAccessToken,
   generateRefreshToken,
 } from "../utils/jwt.util.js";
+import { sendEmail, getVerificationEmailHTML } from "../utils/sendEmail.js";
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -36,6 +38,40 @@ export const register = async (req, res) => {
       });
     }
 
+    if (userName.length < 4) {
+      return res.status(400).json({
+        success: false,
+        message: {
+          eng: "Username must be at least 4 characters long.",
+          rus: "Имя пользователя должно содержать минимум 4 символа.",
+          uzb: "Username kamida 4 ta belgidan iborat bo'lishi kerak.",
+        },
+      });
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(userName)) {
+      return res.status(400).json({
+        success: false,
+        message: {
+          eng: "Username can only contain letters, numbers, and underscores.",
+          rus: "Имя пользователя может содержать только буквы, цифры и подчеркивания.",
+          uzb: "Username faqat harflar, raqamlar va pastki chiziqdan iborat bo'lishi mumkin.",
+        },
+      });
+    }
+
+    // PASSWORD VALIDATION - Bu qo'shing
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: {
+          eng: "Password must be at least 6 characters long.",
+          rus: "Пароль должен содержать минимум 6 символов.",
+          uzb: "Parol kamida 6 ta belgidan iborat bo'lishi kerak.",
+        },
+      });
+    }
+
     const existing = await userModel.findOne({ email });
     if (existing)
       return res.status(409).json({
@@ -57,17 +93,53 @@ export const register = async (req, res) => {
       });
 
     const hashed = await bcrypt.hash(password, 10);
-    const user = await userModel.create({ email, userName, password: hashed });
-
-    return res.status(201).json({
-      message: {
-        eng: "Welcome! Your account has been created successfully.",
-        rus: "Добро пожаловать! Ваш аккаунт успешно создан.",
-        uzb: "Xush kelibsiz! Hisobingiz muvaffaqiyatli yaratildi.",
-      },
-      userId: user._id,
-      data: user,
+    const user = await userModel.create({
+      email,
+      userName,
+      password: hashed,
+      isVerified: false, // Default false
     });
+
+    // Verification token yaratish
+    const verificationToken = user.createVerificationToken();
+    await user.save({ validateBeforeSave: false });
+
+    // Verification URL yaratish
+    const verificationUrl = `${req.protocol}://${req.get(
+      "host"
+    )}/api/v1/auth/verify-email/${verificationToken}`;
+
+    // Email yuborish
+    try {
+      await sendEmail({
+        email: user.email,
+        subject: "Email Verification | Email Tasdiqlash",
+        html: getVerificationEmailHTML(user.userName, verificationUrl, "eng"),
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: {
+          eng: "Account created! Please check your email to verify your account.",
+          rus: "Аккаунт создан! Проверьте почту для подтверждения.",
+          uzb: "Hisob yaratildi! Emailingizni tekshiring va tasdiqlab oling.",
+        },
+        userId: user._id,
+      });
+    } catch (emailError) {
+      // Agar email yuborishda xatolik bo'lsa, userni o'chiramiz
+      await userModel.findByIdAndDelete(user._id);
+      console.error("Email sending error:", emailError);
+
+      return res.status(500).json({
+        success: false,
+        message: {
+          eng: "Failed to send verification email. Please try again.",
+          rus: "Не удалось отправить письмо. Попробуйте снова.",
+          uzb: "Email yuborishda xatolik. Qaytadan urinib ko'ring.",
+        },
+      });
+    }
   } catch (err) {
     console.error(err);
     return res.status(500).json({
@@ -75,6 +147,162 @@ export const register = async (req, res) => {
         eng: "Oops! Something went wrong on our end. We're working on it!",
         rus: "Упс! Что-то пошло не так с нашей стороны. Мы уже исправляем!",
         uzb: "Voy! Biz tomondan xatolik yuz berdi. Hozir tuzatamiz!",
+      },
+    });
+  }
+};
+
+// VERIFY EMAIL - Emailni tasdiqlash
+export const verifyEmail = async (req, res) => {
+  try {
+    // Tokenni hash qilish
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(req.params.token)
+      .digest("hex");
+
+    // Userni topish
+    const user = await userModel.findOne({
+      verificationToken: hashedToken,
+      verificationTokenExpiry: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: {
+          eng: "Invalid or expired verification link.",
+          rus: "Неверная или истекшая ссылка.",
+          uzb: "Link yaroqsiz yoki muddati tugagan.",
+        },
+      });
+    }
+
+    // Userni verify qilish
+    user.isVerified = true;
+    user.verificationToken = undefined;
+    user.verificationTokenExpiry = undefined;
+    await user.save({ validateBeforeSave: false });
+
+    // Auto-login: Token berish
+    const accessToken = generateAccessToken({
+      id: user._id,
+      email: user.email,
+    });
+    const refreshToken = generateRefreshToken({ id: user._id });
+
+    user.refreshToken = refreshToken;
+    await user.save({ validateBeforeSave: false });
+
+    res.cookie("accessToken", accessToken, {
+      ...COOKIE_OPTIONS,
+      maxAge: 15 * 60 * 1000,
+    });
+    res.cookie("refreshToken", refreshToken, {
+      ...COOKIE_OPTIONS,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: {
+        eng: "Email verified successfully! You are now logged in.",
+        rus: "Email успешно подтвержден! Вы вошли в систему.",
+        uzb: "Email muvaffaqiyatli tasdiqlandi! Siz tizimga kirdingiz.",
+      },
+      token: accessToken,
+      user: {
+        id: user._id,
+        userName: user.userName,
+        email: user.email,
+        avatar: user.avatar,
+        bio: user.bio,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(400).json({
+      success: false,
+      message: {
+        eng: "Verification failed. Please try again.",
+        rus: "Ошибка верификации. Попробуйте снова.",
+        uzb: "Tasdiqlashda xatolik. Qaytadan urinib ko'ring.",
+      },
+    });
+  }
+};
+
+// RESEND VERIFICATION - Qayta yuborish
+export const resendVerification = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: {
+          eng: "Email is required.",
+          rus: "Email обязателен.",
+          uzb: "Email kiritilishi shart.",
+        },
+      });
+    }
+
+    const user = await userModel.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: {
+          eng: "User not found.",
+          rus: "Пользователь не найден.",
+          uzb: "Foydalanuvchi topilmadi.",
+        },
+      });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({
+        success: false,
+        message: {
+          eng: "Email is already verified.",
+          rus: "Email уже подтвержден.",
+          uzb: "Email allaqachon tasdiqlangan.",
+        },
+      });
+    }
+
+    // Yangi token yaratish
+    const verificationToken = user.createVerificationToken();
+    await user.save({ validateBeforeSave: false });
+
+    // Email yuborish
+    const verificationUrl = `${req.protocol}://${req.get(
+      "host"
+    )}/api/v1/auth/verify-email/${verificationToken}`;
+
+    await sendEmail({
+      email: user.email,
+      subject: "Email Verification - Resend | Qayta yuborish",
+      html: getVerificationEmailHTML(user.userName, verificationUrl, "uzb"),
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: {
+        eng: "Verification email resent successfully.",
+        rus: "Письмо с подтверждением отправлено повторно.",
+        uzb: "Tasdiqlash linki qayta yuborildi.",
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: {
+        eng: "Failed to resend verification email.",
+        rus: "Не удалось повторно отправить письмо.",
+        uzb: "Email qayta yuborishda xatolik.",
       },
     });
   }
@@ -121,10 +349,23 @@ export const login = async (req, res) => {
         },
       });
 
+    // Email verify tekshirish
+    if (!user.isVerified) {
+      return res.status(401).json({
+        success: false,
+        isVerified: false,
+        message: {
+          eng: "Please verify your email first. Check your inbox.",
+          rus: "Пожалуйста, сначала подтвердите email. Проверьте почту.",
+          uzb: "Iltimos avval emailingizni tasdiqlang. Pochtangizni tekshiring.",
+        },
+      });
+    }
+
     const accessToken = generateAccessToken({
       id: user._id,
       email: user.email,
-      // userName: user.userName,
+      userName: user.userName,
     });
     const refreshToken = generateRefreshToken({ id: user._id });
 
@@ -141,6 +382,7 @@ export const login = async (req, res) => {
     });
 
     return res.status(200).json({
+      success: true,
       message: {
         eng: "Logged in successfully!",
         rus: "Вы успешно вошли!",
@@ -221,6 +463,7 @@ export const refresh = async (req, res) => {
     const newAccessToken = generateAccessToken({
       id: user._id,
       email: user.email,
+      userName: user.userName,
     });
     const newRefreshToken = generateRefreshToken({ id: user._id });
 

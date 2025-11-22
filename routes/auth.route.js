@@ -1,18 +1,24 @@
 /** @format */
-
 import express from "express";
 import {
   register,
   login,
   refresh,
   logout,
+  verifyEmail,
+  resendVerification,
 } from "../controller/auth.controller.js";
 import { verifyAccessToken } from "../middleware/auth.middleware.js";
 
 const authRouter = express.Router();
 
+// Public routes
 authRouter.post("/register", register);
 authRouter.post("/login", login);
+authRouter.get("/verify-email/:token", verifyEmail); // Email verification
+authRouter.post("/resend-verification", resendVerification); // Qayta yuborish
+
+// Protected routes
 authRouter.post("/refresh", verifyAccessToken, refresh);
 authRouter.post("/logout", verifyAccessToken, logout);
 

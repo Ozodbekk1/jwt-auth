@@ -1,5 +1,4 @@
 /** @format */
-
 import express from "express";
 const app = express();
 import { configDotenv } from "dotenv";
@@ -10,6 +9,7 @@ import cookieParser from "cookie-parser";
 import { verifyAccessToken } from "./middleware/auth.middleware.js";
 import morgan from "morgan";
 import userRouter from "./routes/user.route.js";
+import { startCleanupJob } from "./utils/cleanupJob.js";
 
 configDotenv();
 
@@ -18,6 +18,8 @@ mongoose
   .connect(process.env.MONGODB_URI)
   .then((response) => {
     console.log("MongoDB Connection Succeeded. ✅");
+
+    startCleanupJob();
   })
   .catch((error) => {
     console.log("Error in DB connection: " + error);
@@ -31,13 +33,8 @@ app.use(
     credentials: true,
   })
 );
-
 app.use(express.json());
 app.use(cookieParser());
-
-app.use(express.json());
-app.use(cookieParser());
-
 app.use(
   morgan(function (tokens, req, res) {
     return [
@@ -54,12 +51,10 @@ app.use(
 
 // Routes
 app.use("/api/v1/auth", authRouter);
-app.use("/api/v1", userRouter);
-// app.use("/api/v1", postRouter);
-// app.use("/api/v1", commentRoute);
+app.use("/api/v1/user", userRouter);
 
 app.get("/", (req, res) => {
-  res.send("JWT AUTH API IS LIVE !");
+  res.send("JWT AUTH API WITH EMAIL VERIFICATION IS LIVE! 📧✅");
 });
 
 app.get("/api/protected", verifyAccessToken, (req, res) => {
@@ -68,7 +63,7 @@ app.get("/api/protected", verifyAccessToken, (req, res) => {
     message: {
       eng: "Access granted. You are authenticated.",
       rus: "Доступ разрешён. Вы авторизованы.",
-      uzb: "Ruxsat berildi. Siz autentifikatsiyadan o‘tdingiz.",
+      uzb: "Ruxsat berildi. Siz autentifikatsiyadan o'tdingiz.",
     },
     data: {
       userId: req.user.id,
