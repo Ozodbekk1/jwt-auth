@@ -539,3 +539,98 @@ export const logout = async (req, res) => {
     });
   }
 };
+
+export const resetPassword = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.trim().length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: {
+          eng: "Password must be at least 6 characters long.",
+          rus: "Пароль должен содержать минимум 6 символов.",
+          uzb: "Parol kamida 6 ta belgidan iborat bo'lishi kerak.",
+        },
+      });
+    }
+
+    // Optional: Add stronger rule (recommended)
+    if (newPassword.length > 50) {
+      return res.status(400).json({
+        success: false,
+        message: {
+          eng: "Password is too long (maximum 50 characters).",
+          rus: "Пароль слишком длинный (максимум 50 символов).",
+          uzb: "Parol juda uzun (maksimum 50 belgi).",
+        },
+      });
+    }
+
+    // Optional: Block very weak/common passwords
+    const weakPasswords = [
+      "123456",
+      "password",
+      "qwerty",
+      "parol",
+      "123456789",
+      "111111",
+    ];
+    if (weakPasswords.includes(newPassword.toLowerCase())) {
+      return res.status(400).json({
+        success: false,
+        message: {
+          eng: "This password is too common. Please choose a stronger one.",
+          rus: "Этот пароль слишком простой. Выберите более надёжный.",
+          uzb: "Bu parol juda oddiy. Kuchliroq parol tanlang.",
+        },
+      });
+    }
+
+    const user = await userModel
+      .findOne({
+        resetPasswordToken: token,
+        resetPasswordExpires: { $gt: Date.now() }, // token not expired
+      })
+      .select("+password");
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: {
+          eng: "Invalid or expired token",
+          rus: "Недействительный или просроченный токен",
+          uzb: "Noto‘g‘ri yoki muddati o‘tgan token",
+        },
+      });
+    }
+
+    // Hash new password
+    const hashed = await bcrypt.hash(newPassword, 10);
+
+    user.password = hashed;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: {
+        eng: "Password reset successful",
+        rus: "Пароль успешно изменён",
+        uzb: "Parol muvaffaqiyatli yangilandi",
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: {
+        eng: "Server error. Please try again later.",
+        rus: "Ошибка сервера. Попробуйте позже.",
+        uzb: "Server xatosi. Iltimos, keyinroq urinib ko‘ring.",
+      },
+    });
+  }
+};
