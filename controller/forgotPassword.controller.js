@@ -8,23 +8,43 @@ export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
 
-    const user = await userModel.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+    if (!email || !email.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
     }
 
-    // 1. Generate token
-    const resetToken = crypto.randomBytes(32).toString("hex");
+    const existingEmail = await userModel.findOne({ email });
 
-    // 2. Save token & expire time (15 minutes)
-    user.resetPasswordToken = resetToken;
-    user.resetPasswordExpires = Date.now() + 15 * 60 * 1000;
-    await user.save();
+    if (!existingEmail) {
+      return res.status(404).json({
+        success: false,
+        message: {
+          eng: "User with this email not found",
+          rus: "Пользователь с таким email не найден",
+          uzb: "Bu email bilan foydalanuvchi topilmadi",
+        },
+      });
+    }
 
-    // 3. Create reset link
-    const resetUrl = `http://localhost:${process.env.PORT}/api/v1/auth/reset-password/${resetToken}`;
+    const user = await userModel.findOne({ email: email.toLowerCase().trim() });
 
-    // 4. Configure email sender
+    const successMessage =
+      "If an account exists with this email, a reset link has been sent.";
+
+    if (!user) {
+      return res.status(200).json({
+        success: true,
+        message: successMessage,
+      });
+    }
+
+    const resetToken = user.createPasswordResetToken();
+    await user.save({ validateBeforeSave: false });
+
+    const resetUrl = `http://${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+
     let transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -34,7 +54,7 @@ export const forgotPassword = async (req, res) => {
     });
 
     await transporter.sendMail({
-      from: process.env.EMAIL,
+      from: `"Your App" <${process.env.EMAIL_USER}>`,
       to: user.email,
       subject: "Reset your password",
       html: `
@@ -42,12 +62,27 @@ export const forgotPassword = async (req, res) => {
         <p>Click the link below to reset password:</p>
         <a href="${resetUrl}">${resetUrl}</a>
         <p>This link expires in 15 minutes.</p>
+        <p>If you didn't request this, ignore this email.</p>
       `,
     });
 
-    res.status(200).json({ message: "Reset link sent to your email" });
+    res.status(200).json({
+      success: true,
+      message: successMessage,
+    });
   } catch (error) {
     console.log(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+
+    if (user) {
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      await user.save({ validateBeforeSave: false });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
   }
 };

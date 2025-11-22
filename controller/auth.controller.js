@@ -545,6 +545,17 @@ export const resetPassword = async (req, res) => {
     const { token } = req.params;
     const { newPassword } = req.body;
 
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: {
+          eng: "Invalid reset link",
+          rus: "Недействительная ссылка сброса",
+          uzb: "Noto'g'ri havola",
+        },
+      });
+    }
+
     if (!newPassword || newPassword.trim().length < 6) {
       return res.status(400).json({
         success: false,
@@ -556,7 +567,6 @@ export const resetPassword = async (req, res) => {
       });
     }
 
-    // Optional: Add stronger rule (recommended)
     if (newPassword.length > 50) {
       return res.status(400).json({
         success: false,
@@ -568,7 +578,6 @@ export const resetPassword = async (req, res) => {
       });
     }
 
-    // Optional: Block very weak/common passwords
     const weakPasswords = [
       "123456",
       "password",
@@ -588,12 +597,14 @@ export const resetPassword = async (req, res) => {
       });
     }
 
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
     const user = await userModel
       .findOne({
-        resetPasswordToken: token,
-        resetPasswordExpires: { $gt: Date.now() }, // token not expired
+        resetPasswordToken: hashedToken,
+        resetPasswordExpires: { $gt: Date.now() },
       })
-      .select("+password");
+      .select("+password +resetPasswordToken +resetPasswordExpires");
 
     if (!user) {
       return res.status(400).json({
@@ -601,18 +612,16 @@ export const resetPassword = async (req, res) => {
         message: {
           eng: "Invalid or expired token",
           rus: "Недействительный или просроченный токен",
-          uzb: "Noto‘g‘ri yoki muddati o‘tgan token",
+          uzb: "Noto'g'ri yoki muddati o'tgan token",
         },
       });
     }
 
-    // Hash new password
     const hashed = await bcrypt.hash(newPassword, 10);
-
     user.password = hashed;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
-
+    user.refreshToken = null;
     await user.save();
 
     res.status(200).json({
@@ -624,12 +633,13 @@ export const resetPassword = async (req, res) => {
       },
     });
   } catch (error) {
+    console.log(error);
     res.status(500).json({
       success: false,
       message: {
         eng: "Server error. Please try again later.",
         rus: "Ошибка сервера. Попробуйте позже.",
-        uzb: "Server xatosi. Iltimos, keyinroq urinib ko‘ring.",
+        uzb: "Server xatosi. Iltimos, keyinroq urinib ko'ring.",
       },
     });
   }

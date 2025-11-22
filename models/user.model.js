@@ -63,6 +63,23 @@ userSchema.methods.createVerificationToken = function () {
   return verificationToken;
 };
 
+userSchema.methods.createPasswordResetToken = function () {
+  // Generate random token (this will be sent to user via email)
+  const resetToken = crypto.randomBytes(32).toString("hex");
+
+  // Hash and store in database (for security)
+  this.resetPasswordToken = crypto
+    .createHash("sha256")
+    .update(resetToken)
+    .digest("hex");
+
+  // 15 minutes expiry
+  this.resetPasswordExpires = Date.now() + 15 * 60 * 1000;
+
+  // Return plain token to send via email
+  return resetToken;
+};
+
 userSchema.index({ verificationTokenExpiry: 1 }, { expireAfterSeconds: 0 });
 
 export default mongoose.model("User", userSchema);
