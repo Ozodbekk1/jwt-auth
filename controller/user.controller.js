@@ -173,3 +173,57 @@ export const updateUser = async (req, res) => {
     });
   }
 };
+
+export const getUserByUserName = async (req, res) => {
+  try {
+    const { userName } = req.params;
+
+    if (!userName || userName.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: {
+          eng: "Username is required",
+          rus: "Требуется имя пользователя",
+          uzb: "Foydalanuvchi nomi talab qilinadi",
+        },
+      });
+    }
+
+    const user = await userModel
+      .findOne({ userName: userName.trim() })
+      .select("-password -refreshToken");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: {
+          eng: "User not found",
+          rus: "Пользователь не найден",
+          uzb: "Foydalanuvchi topilmadi",
+        },
+      });
+    }
+
+    // Return user data
+    res.status(200).json({
+      success: true,
+      message: {
+        eng: "Success",
+        rus: "Успешно",
+        uzb: "Muvaffaqiyatli",
+      },
+      data: user,
+    });
+  } catch (error) {
+    console.error("Error fetching user:", error);
+
+    res.status(500).json({
+      success: false,
+      message: {
+        eng: "Internal server error",
+        rus: "Внутренняя ошибка сервера",
+        uzb: "Ichki server xatosi",
+      },
+    });
+  }
+};
