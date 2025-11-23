@@ -48,6 +48,15 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+userSchema.virtual("quotes", {
+  ref: "Quote",
+  localField: "_id",
+  foreignField: "author",
+});
+
+userSchema.set("toJSON", { virtuals: true });
+userSchema.set("toObject", { virtuals: true });
+
 // Verification token yaratish method
 userSchema.methods.createVerificationToken = function () {
   const verificationToken = crypto.randomBytes(32).toString("hex");

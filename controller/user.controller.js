@@ -6,7 +6,13 @@ export const getCurrentUser = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const user = await userModel.findById(userId).select("-password").lean();
+    const user = await userModel
+      .findById(userId)
+      .select("-password")
+      .select("-refreshToken")
+      .populate({
+        path: "quotes",
+      });
 
     if (!user) {
       return res.status(404).json({
@@ -26,13 +32,7 @@ export const getCurrentUser = async (req, res) => {
         rus: "Профиль успешно загружен",
         uzb: "Profil muvaffaqiyatli yuklandi",
       },
-      user: {
-        id: user._id,
-        email: user.email,
-        userName: user.userName,
-        avatar: user.avatar || null,
-        bio: user.bio || "",
-      },
+      user: user,
     });
   } catch (error) {
     console.error("Get current user error:", error);
@@ -191,7 +191,10 @@ export const getUserByUserName = async (req, res) => {
 
     const user = await userModel
       .findOne({ userName: userName.trim() })
-      .select("-password -refreshToken");
+      .select("-password -refreshToken")
+      .populate({
+        path: "quotes",
+      });
 
     if (!user) {
       return res.status(404).json({

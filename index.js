@@ -10,6 +10,7 @@ import { verifyAccessToken } from "./middleware/auth.middleware.js";
 import morgan from "morgan";
 import userRouter from "./routes/user.route.js";
 import { startCleanupJob } from "./utils/cleanupJob.js";
+import quoteRouter from "./routes/quote.route.js";
 
 configDotenv();
 
@@ -52,6 +53,7 @@ app.use(
 // Routes
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/user", userRouter);
+app.use("/api/v1/quotes", quoteRouter);
 
 app.get("/", (req, res) => {
   res.send("JWT AUTH API WITH EMAIL VERIFICATION IS LIVE! 📧✅");
