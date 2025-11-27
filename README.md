@@ -42,7 +42,6 @@ CLIENT_URL=http://localhost:3000
 ## Installation & Running
 ```bash
 git clone <repo>
-cd quoteverse-api
 npm install
 npm run dev    # development with nodemon
 npm start      # production
