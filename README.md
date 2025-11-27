@@ -1,967 +1,313 @@
-# JWT Authentication API
+<!-- @format -->
 
-A secure and robust JWT (JSON Web Token) based authentication system providing user registration, login, token refresh, and protected route access.
+# QuoteVerse API – Full Documentation  
+A modern RESTful API for a quote-sharing social platform built with Node.js, Express.js, MongoDB & JWT authentication.
 
-## Table of Contents
-
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Getting Started](#getting-started)
-- [Environment Variables](#environment-variables)
-- [API Endpoints](#api-endpoints)
-  - [Register User](#1-register-user)
-  - [Login User](#2-login-user)
-  - [Refresh Token](#3-refresh-token)
-  - [Get Current User](#4-get-current-user)
-  - [Logout](#5-logout)
-  - [Update User Profile](#6-update-user-profile)
-  - [Change Password](#7-change-password)
-- [Authentication Flow](#authentication-flow)
-- [Error Handling](#error-handling)
-- [Frontend Integration Guide](#frontend-integration-guide)
-
----
+## Base URL
+```
+https://your-domain.com/api/v1
+```
+(or `http://localhost:5000/api/v1` in development)
 
 ## Features
-
-- ✅ User registration with password hashing
-- ✅ JWT-based authentication (Access & Refresh tokens)
-- ✅ Token refresh mechanism
-- ✅ Protected routes with middleware
-- ✅ Password encryption using bcrypt
-- ✅ User profile management
-- ✅ Logout functionality
-- ✅ Error handling and validation
-
----
+- User registration & login with email verification  
+- JWT access + refresh token system  
+- Password reset flow  
+- Create, update, delete quotes  
+- Comment system on quotes  
+- Protected routes with `verifyAccessToken` middleware  
+- Get public quotes & user-specific quotes  
 
 ## Tech Stack
+- Node.js + Express  
+- MongoDB + Mongoose  
+- JWT (access & refresh tokens)  
+- bcrypt for password hashing  
+- nodemailer for emails  
 
-- **Node.js** - Runtime environment
-- **Express.js** - Web framework
-- **JWT (jsonwebtoken)** - Token generation and verification
-- **bcrypt** - Password hashing
-- **MongoDB/PostgreSQL** - Database (adjust based on your implementation)
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js (v14 or higher)
-- npm or yarn
-- MongoDB/PostgreSQL database
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/Ozodbekk1/jwt-auth.git
-
-# Navigate to project directory
-cd jwt-auth
-
-# Install dependencies
-npm install
-
-# Set up environment variables (see below)
-cp .env.example .env
-
-# Start the server
-npm start
-```
-
----
-
-## Environment Variables
-
-Create a `.env` file in the root directory:
-
+## Environment Variables (.env)
 ```env
 PORT=5000
-DATABASE_URL=your_database_connection_string
-JWT_ACCESS_SECRET=your_very_secure_access_token_secret
-JWT_REFRESH_SECRET=your_very_secure_refresh_token_secret
-JWT_ACCESS_EXPIRATION=15m
-JWT_REFRESH_EXPIRATION=7d
-NODE_ENV=development
+MONGO_URI=mongodb://127.0.0.1:27017/quoteverse
+JWT_ACCESS_SECRET=your_very_long_access_secret
+JWT_REFRESH_SECRET=your_very_long_refresh_secret
+JWT_ACCESS_EXPIRES=15m
+JWT_REFRESH_EXPIRES=7d
+
+EMAIL_USER=your@gmail.com
+EMAIL_PASS=your_app_password
+CLIENT_URL=http://localhost:3000
+```
+
+## Installation & Running
+```bash
+git clone <repo>
+cd quoteverse-api
+npm install
+npm run dev    # development with nodemon
+npm start      # production
 ```
 
 ---
 
 ## API Endpoints
 
-Base URL: `http://localhost:5000/api`
+### Authentication Routes (`/auth`)
 
----
+| Method | Endpoint                        | Auth Required | Description                       |
+|-------|----------------------------------|---------------|-----------------------------------|
+| POST  | `/auth/register`                 | No            | Register new user                 |
+| POST  | `/auth/login`                    | No            | Login → returns access & refresh  |
+| POST  | `/auth/refresh`                  | Yes           | Get new access token              |
+| POST  | `/auth/logout`                   | Yes           | Invalidate refresh token          |
+| GET   | `/auth/verify-email/:token`      | No            | Verify email address              |
+| POST  | `/auth/resend-verification`      | No            | Resend verification email         |
+| POST  | `/auth/forgot-password`          | No            | Send password reset link          |
+| POST  | `/auth/reset-password/:token`    | No            | Reset password with token         |
 
-### 1. Register User
-
-**Endpoint:** `POST /auth/register`
-
-**Description:** Register a new user account
-
-**Request Body:**
+#### Register
+```bash
+curl -X POST http://localhost:5000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John Doe",
+    "userName": "johndoe",
+    "email": "john@example.com",
+    "password": "StrongPass123!"
+  }'
+```
+**Success Response (201)**
 ```json
 {
-  "email": "user@example.com",
-  "password": "SecurePass123!",
-  "username": "johndoe",
-  "firstName": "John",
-  "lastName": "Doe"
+  "success": true,
+  "message": "User registered. Please check your email to verify."
 }
 ```
 
-**Required Fields:**
-- `email` (string, unique, valid email format)
-- `password` (string, minimum 6 characters)
-- `username` (string, unique, minimum 3 characters)
-
-**Optional Fields:**
-- `firstName` (string)
-- `lastName` (string)
-
-**cURL Example:**
+#### Login
 ```bash
-curl -X POST http://localhost:5000/api/auth/register \
+curl -X POST http://localhost:5000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "user@example.com",
-    "password": "SecurePass123!",
-    "username": "johndoe",
-    "firstName": "John",
-    "lastName": "Doe"
+    "email": "john@example.com",
+    "password": "StrongPass123!"
+  }'
+```
+**Response (200)**
+```json
+{
+  "success": true,
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "eyJhbGciOi..."
+}
+```
+
+#### Refresh Token
+```bash
+curl -X POST http://localhost:5000/api/v1/auth/refresh \
+  -H "Authorization: Bearer <access_token>"
+```
+→ Returns new `accessToken`
+
+#### Logout
+```bash
+curl -X POST http://localhost:5000/api/v1/auth/logout \
+  -H "Authorization: Bearer <access_token>"
+```
+
+#### Verify Email
+Open link sent to email:
+```
+GET /api/v1/auth/verify-email/:token
+```
+
+#### Forgot Password
+```bash
+curl -X POST http://localhost:5000/api/v1/auth/forgot-password \
+  -H "Content-Type: application/json" \
+  -d '{"email": "john@example.com"}'
+```
+
+#### Reset Password
+```bash
+curl -X POST http://localhost:5000/api/v1/auth/reset-password/:token \
+  -H "Content-Type: application/json" \
+  -d '{"password": "NewStrongPass123!"}'
+```
+
+---
+
+### Quote Routes (`/quote`)
+
+| Method | Endpoint                              | Auth | Description                      |
+|--------|--------------------------------------|------|----------------------------------|
+| POST   | `/quote/create/quote`                | Yes  | Create new quote                 |
+| PUT    | `/quote/update/quote/:quoteId`       | Yes  | Update own quote                 |
+| DELETE | `/quote/delete/quote/:quoteId`       | Yes  | Delete own quote                 |
+| GET    | `/quote/get/quote/my-quote`          | Yes  Yes | Get all quotes of logged-in user |
+| GET    | `/quote/get/quote`                   | No   | Get all public quotes (latest first) |
+| GET    | `/quote/get/quote/:quoteId`          | No   | Get single quote with comments   |
+| POST   | `/quote/write/comment/:quoteId`      | Yes  | Add comment                      |
+| PUT    | `/quote/update/comment/:commentId`   | Yes  | Update own comment               |
+| DELETE | `/quote/delete/comment/:quoteId/:commentId` | Yes | Delete own comment        |
+
+#### Create Quote
+```bash
+curl -X POST http://localhost:5000/api/v1/quote/create/quote \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "The only way to do great work is to love what you do.",
+    "author": "Steve Jobs"
   }'
 ```
 
-**Success Response (201):**
-```json
-{
-  "success": true,
-  "message": "User registered successfully",
-  "data": {
-    "user": {
-      "id": "64a8f7e2c3d9e4f5a6b7c8d9",
-      "email": "user@example.com",
-      "username": "johndoe",
-      "firstName": "John",
-      "lastName": "Doe",
-      "createdAt": "2024-03-15T10:30:00.000Z"
-    },
-    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-  }
-}
-```
-
-**Frontend Needs:**
-- Form with email, password, username fields
-- Email validation
-- Password strength indicator (optional)
-- Store tokens in localStorage/sessionStorage or httpOnly cookies
-
----
-
-### 2. Login User
-
-**Endpoint:** `POST /auth/login`
-
-**Description:** Authenticate user and receive JWT tokens
-
-**Request Body:**
-```json
-{
-  "email": "user@example.com",
-  "password": "SecurePass123!"
-}
-```
-
-**Required Fields:**
-- `email` (string) or `username` (string)
-- `password` (string)
-
-**cURL Example:**
+#### Update Quote
 ```bash
-curl -X POST http://localhost:5000/api/auth/login \
-  -H "Content-Type: application/json" \
+curl -X PUT http://localhost:5000/api/v1/quote/update/quote/64f8a1b2c9d3e2f1a2345678 \
+  -H "Authorization: Bearer <access_token>" \
   -d '{
-    "email": "user@example.com",
-    "password": "SecurePass123!"
+    "text": "Updated quote text here"
   }'
 ```
 
-**Success Response (200):**
-```json
-{
-  "success": true,
-  "message": "Login successful",
-  "data": {
-    "user": {
-      "id": "64a8f7e2c3d9e4f5a6b7c8d9",
-      "email": "user@example.com",
-      "username": "johndoe",
-      "firstName": "John",
-      "lastName": "Doe"
-    },
-    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-  }
-}
-```
-
-**Frontend Needs:**
-- Login form with email/username and password
-- Store both tokens securely
-- Redirect to dashboard on success
-- Handle "Remember me" functionality (optional)
-
----
-
-### 3. Refresh Token
-
-**Endpoint:** `POST /auth/refresh`
-
-**Description:** Get a new access token using refresh token
-
-**Request Body:**
-```json
-{
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
-**Required Fields:**
-- `refreshToken` (string)
-
-**cURL Example:**
+#### Get All Quotes (Public)
 ```bash
-curl -X POST http://localhost:5000/api/auth/refresh \
+curl http://localhost:5000/api/v1/quote/get/quote
+```
+
+#### Get My Quotes
+```bash
+curl http://localhost:5000/api/v1/quote/get/quote/my-quote \
+  -H "Authorization: Bearer <access_token>"
+```
+
+#### Write Comment
+```bash
+curl -X POST http://localhost:5000/api/v1/quote/write/comment/64f8a1b2c9d3e2f1a2345678 \
+  -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    "text": "So inspiring!"
   }'
 ```
 
-**Success Response (200):**
-```json
-{
-  "success": true,
-  "message": "Token refreshed successfully",
-  "data": {
-    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-  }
-}
-```
-
-**Frontend Needs:**
-- Automatic token refresh when access token expires
-- Axios/fetch interceptor to handle 401 errors
-- Store new tokens after refresh
-
----
-
-### 4. Get Current User
-
-**Endpoint:** `GET /auth/me`
-
-**Description:** Get current authenticated user details
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**cURL Example:**
+#### Update Comment
 ```bash
-curl -X GET http://localhost:5000/api/auth/me \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-```
-
-**Success Response (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "user": {
-      "id": "64a8f7e2c3d9e4f5a6b7c8d9",
-      "email": "user@example.com",
-      "username": "johndoe",
-      "firstName": "John",
-      "lastName": "Doe",
-      "createdAt": "2024-03-15T10:30:00.000Z",
-      "updatedAt": "2024-03-15T10:30:00.000Z"
-    }
-  }
-}
-```
-
-**Frontend Needs:**
-- Call on app initialization to check auth status
-- Display user info in profile/navbar
-- Handle 401 to redirect to login
-
----
-
-### 5. Logout
-
-**Endpoint:** `POST /auth/logout`
-
-**Description:** Invalidate refresh token and logout user
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Request Body (Optional):**
-```json
-{
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
-**cURL Example:**
-```bash
-curl -X POST http://localhost:5000/api/auth/logout \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -H "Content-Type: application/json" \
+curl -X PUT http://localhost:5000/api/v1/quote/update/comment/64f9b3d4e5f6a7b8c9d0e1f2 \
+  -H "Authorization: Bearer <access_token>" \
   -d '{
-    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    "text": "Actually even more inspiring!"
   }'
 ```
 
-**Success Response (200):**
-```json
-{
-  "success": true,
-  "message": "Logout successful"
-}
+#### Delete Comment
+```bash
+curl -X DELETE http://localhost:5000/api/v1/quote/delete/comment/64f8a1b2c9d3e2f1a2345678/64f9b3d4e5f6a7b8c9d0e1f2 \
+  -H "Authorization: Bearer <access_token>"
 ```
-
-**Frontend Needs:**
-- Clear tokens from storage
-- Reset application state
-- Redirect to login page
 
 ---
 
-### 6. Update User Profile
+### User Routes (`/user`)
 
-**Endpoint:** `PUT /auth/profile`
+| Method | Endpoint                     | Auth | Description                     |
+|--------|-----------------------------|------|---------------------------------|
+| PUT    | `/user/update/user`         | Yes  | Update profile (name, bio, avatar…) |
+| GET    | `/user/profile`             | Yes  | Get current logged-in user      |
+| GET    | `/user/profile/:userName`   | No   | Get public profile by username   |
 
-**Description:** Update current user's profile information
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Request Body:**
-```json
-{
-  "firstName": "Jane",
-  "lastName": "Smith",
-  "username": "janesmith"
-}
-```
-
-**cURL Example:**
+#### Update Profile
 ```bash
-curl -X PUT http://localhost:5000/api/auth/profile \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+curl -X PUT http://localhost:5000/api/v1/user/update/user \
+  -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "firstName": "Jane",
-    "lastName": "Smith",
-    "username": "janesmith"
+    "name": "John Updated",
+    "bio": "Full-stack dev & quote lover"
   }'
 ```
 
-**Success Response (200):**
-```json
-{
-  "success": true,
-  "message": "Profile updated successfully",
-  "data": {
-    "user": {
-      "id": "64a8f7e2c3d9e4f5a6b7c8d9",
-      "email": "user@example.com",
-      "username": "janesmith",
-      "firstName": "Jane",
-      "lastName": "Smith",
-      "updatedAt": "2024-03-15T12:30:00.000Z"
-    }
-  }
-}
-```
-
-**Frontend Needs:**
-- Profile edit form
-- Field validation
-- Update UI with new user data
-
----
-
-### 7. Change Password
-
-**Endpoint:** `POST /auth/change-password`
-
-**Description:** Change current user's password
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Request Body:**
-```json
-{
-  "currentPassword": "OldPass123!",
-  "newPassword": "NewSecurePass123!"
-}
-```
-
-**Required Fields:**
-- `currentPassword` (string)
-- `newPassword` (string, minimum 6 characters)
-
-**cURL Example:**
+#### Get Current User
 ```bash
-curl -X POST http://localhost:5000/api/auth/change-password \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "currentPassword": "OldPass123!",
-    "newPassword": "NewSecurePass123!"
-  }'
+curl http://localhost:5000/api/v1/user/profile \
+  -H "Authorization: Bearer <access_token>"
 ```
 
-**Success Response (200):**
+#### Get User by Username (public)
+```bash
+curl http://localhost:5000/api/v1/user/profile/johndoe
+```
+
+---
+
+## Authentication Flow (How Frontend Should Handle)
+
+1. **Register → Login** → store `accessToken` & `refreshToken` (secure httpOnly cookie or localStorage)
+2. Attach `Authorization: Bearer <access_token>` to every protected request
+3. When 401 → call `/auth/refresh` → replace access token
+4. On logout → call `/auth/logout` + clear tokens
+
+---
+
+## Expected Request/Response Shapes
+
+### Register / Login Body
 ```json
 {
-  "success": true,
-  "message": "Password changed successfully"
+  "name": "string",
+  "userName": "string (unique)",
+  "email": "string (unique)",
+  "password": "string (min 6)"
 }
 ```
 
-**Frontend Needs:**
-- Password change form with current and new password fields
-- Password confirmation field
-- Password strength indicator
-
----
-
-## Authentication Flow
-
-```
-┌─────────────┐
-│   Client    │
-└──────┬──────┘
-       │
-       │ 1. POST /auth/login
-       │    { email, password }
-       ▼
-┌─────────────┐
-│   Server    │
-└──────┬──────┘
-       │
-       │ 2. Validate credentials
-       │ 3. Generate tokens
-       │
-       ▼
-┌─────────────────────────────┐
-│ accessToken (15min)         │
-│ refreshToken (7days)        │
-└──────┬──────────────────────┘
-       │
-       │ 4. Return tokens to client
-       ▼
-┌─────────────┐
-│   Client    │ Store tokens
-└──────┬──────┘
-       │
-       │ 5. Access protected routes
-       │    Authorization: Bearer <accessToken>
-       ▼
-┌─────────────┐
-│   Server    │ Verify token
-└──────┬──────┘
-       │
-       │ 6. Token expired?
-       ├─── Yes ──► POST /auth/refresh
-       │              { refreshToken }
-       │
-       └─── No ──► Return protected data
+### Quote Body (create/update)
+```json
+{
+  "text": "string (required)",
+  "author": "string (optional)"
+}
 ```
 
----
+### Comment Body
+```json
+{
+  "text": "string (required)"
+}
+```
 
-## Error Handling
+### Typical Success Response
+```json
+{
+  "success": true,
+  "data": { ... }
+}
+```
 
-All error responses follow this format:
-
+### Error Response
 ```json
 {
   "success": false,
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human readable error message",
-    "details": {} // Optional additional details
-  }
-}
-```
-
-### Common Error Codes:
-
-| Status | Code | Message |
-|--------|------|---------|
-| 400 | `VALIDATION_ERROR` | Invalid input data |
-| 401 | `INVALID_CREDENTIALS` | Email or password is incorrect |
-| 401 | `TOKEN_EXPIRED` | Access token has expired |
-| 401 | `TOKEN_INVALID` | Invalid or malformed token |
-| 401 | `UNAUTHORIZED` | Authentication required |
-| 403 | `FORBIDDEN` | Insufficient permissions |
-| 404 | `USER_NOT_FOUND` | User does not exist |
-| 409 | `USER_EXISTS` | Email or username already registered |
-| 500 | `SERVER_ERROR` | Internal server error |
-
-**Example Error Response:**
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Invalid input data",
-    "details": {
-      "email": "Email is required",
-      "password": "Password must be at least 6 characters"
-    }
-  }
+  "message": "Detailed error message"
 }
 ```
 
 ---
 
-## Frontend Integration Guide
-
-### 1. Setting Up Axios Instance
-
-Create an API service with automatic token refresh:
-
-```javascript
-// api/axios.js
-import axios from 'axios';
-
-const API_URL = 'http://localhost:5000/api';
-
-// Create axios instance
-const api = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Request interceptor - Add token to every request
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// Response interceptor - Handle token refresh
-api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-
-    // If error is 401 and we haven't retried yet
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      try {
-        const refreshToken = localStorage.getItem('refreshToken');
-        
-        // Call refresh endpoint
-        const { data } = await axios.post(`${API_URL}/auth/refresh`, {
-          refreshToken,
-        });
-
-        // Save new tokens
-        localStorage.setItem('accessToken', data.data.accessToken);
-        localStorage.setItem('refreshToken', data.data.refreshToken);
-
-        // Retry original request with new token
-        originalRequest.headers.Authorization = `Bearer ${data.data.accessToken}`;
-        return api(originalRequest);
-      } catch (refreshError) {
-        // Refresh failed - logout user
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        window.location.href = '/login';
-        return Promise.reject(refreshError);
-      }
-    }
-
-    return Promise.reject(error);
-  }
-);
-
-export default api;
-```
-
----
-
-### 2. Authentication Service
-
-Create auth service functions:
-
-```javascript
-// services/authService.js
-import api from '../api/axios';
-
-export const authService = {
-  // Register new user
-  register: async (userData) => {
-    const { data } = await api.post('/auth/register', userData);
-    if (data.success) {
-      localStorage.setItem('accessToken', data.data.accessToken);
-      localStorage.setItem('refreshToken', data.data.refreshToken);
-      localStorage.setItem('user', JSON.stringify(data.data.user));
-    }
-    return data;
-  },
-
-  // Login user
-  login: async (credentials) => {
-    const { data } = await api.post('/auth/login', credentials);
-    if (data.success) {
-      localStorage.setItem('accessToken', data.data.accessToken);
-      localStorage.setItem('refreshToken', data.data.refreshToken);
-      localStorage.setItem('user', JSON.stringify(data.data.user));
-    }
-    return data;
-  },
-
-  // Logout user
-  logout: async () => {
-    const refreshToken = localStorage.getItem('refreshToken');
-    try {
-      await api.post('/auth/logout', { refreshToken });
-    } finally {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('user');
-    }
-  },
-
-  // Get current user
-  getCurrentUser: async () => {
-    const { data } = await api.get('/auth/me');
-    return data.data.user;
-  },
-
-  // Update profile
-  updateProfile: async (profileData) => {
-    const { data } = await api.put('/auth/profile', profileData);
-    if (data.success) {
-      localStorage.setItem('user', JSON.stringify(data.data.user));
-    }
-    return data;
-  },
-
-  // Change password
-  changePassword: async (passwords) => {
-    const { data } = await api.post('/auth/change-password', passwords);
-    return data;
-  },
-
-  // Check if user is authenticated
-  isAuthenticated: () => {
-    return !!localStorage.getItem('accessToken');
-  },
-
-  // Get stored user
-  getStoredUser: () => {
-    const user = localStorage.getItem('user');
-    return user ? JSON.parse(user) : null;
-  },
-};
-```
-
----
-
-### 3. React Context Provider (React Example)
-
-```javascript
-// context/AuthContext.jsx
-import React, { createContext, useState, useEffect, useContext } from 'react';
-import { authService } from '../services/authService';
-
-const AuthContext = createContext(null);
-
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Check if user is logged in on mount
-    const initAuth = async () => {
-      if (authService.isAuthenticated()) {
-        try {
-          const userData = await authService.getCurrentUser();
-          setUser(userData);
-        } catch (error) {
-          console.error('Auth init failed:', error);
-        }
-      }
-      setLoading(false);
-    };
-
-    initAuth();
-  }, []);
-
-  const login = async (credentials) => {
-    const response = await authService.login(credentials);
-    setUser(response.data.user);
-    return response;
-  };
-
-  const register = async (userData) => {
-    const response = await authService.register(userData);
-    setUser(response.data.user);
-    return response;
-  };
-
-  const logout = async () => {
-    await authService.logout();
-    setUser(null);
-  };
-
-  const updateProfile = async (profileData) => {
-    const response = await authService.updateProfile(profileData);
-    setUser(response.data.user);
-    return response;
-  };
-
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        login,
-        register,
-        logout,
-        updateProfile,
-        isAuthenticated: !!user,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-  return context;
-};
-```
-
----
-
-### 4. Protected Route Component
-
-```javascript
-// components/ProtectedRoute.jsx
-import { Navigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-
-export const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
-
-  if (loading) {
-    return <div>Loading...</div>;
-  }
-
-  return isAuthenticated ? children : <Navigate to="/login" replace />;
-};
-```
-
----
-
-### 5. Example Login Component
-
-```javascript
-// pages/Login.jsx
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-
-export const Login = () => {
-  const [formData, setFormData] = useState({ email: '', password: '' });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
-  const navigate = useNavigate();
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    try {
-      await login(formData);
-      navigate('/dashboard');
-    } catch (err) {
-      setError(err.response?.data?.error?.message || 'Login failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <input
-        type="email"
-        placeholder="Email"
-        value={formData.email}
-        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-        required
-      />
-      <input
-        type="password"
-        placeholder="Password"
-        value={formData.password}
-        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-        required
-      />
-      {error && <div className="error">{error}</div>}
-      <button type="submit" disabled={loading}>
-        {loading ? 'Logging in...' : 'Login'}
-      </button>
-    </form>
-  );
-};
-```
-
----
-
-### 6. Using with Vue.js
-
-For Vue.js projects, create a Pinia store:
-
-```javascript
-// stores/auth.js
-import { defineStore } from 'pinia';
-import { authService } from '../services/authService';
-
-export const useAuthStore = defineStore('auth', {
-  state: () => ({
-    user: null,
-    loading: false,
-  }),
-
-  getters: {
-    isAuthenticated: (state) => !!state.user,
-  },
-
-  actions: {
-    async login(credentials) {
-      this.loading = true;
-      try {
-        const response = await authService.login(credentials);
-        this.user = response.data.user;
-        return response;
-      } finally {
-        this.loading = false;
-      }
-    },
-
-    async logout() {
-      await authService.logout();
-      this.user = null;
-    },
-
-    async fetchUser() {
-      try {
-        this.user = await authService.getCurrentUser();
-      } catch (error) {
-        this.user = null;
-      }
-    },
-  },
-});
-```
-
----
-
-### 7. Security Best Practices
-
-1. **Store tokens securely:**
-   - Use `httpOnly` cookies for production (most secure)
-   - Use `localStorage` only for development/testing
-   - Never store tokens in regular cookies accessible by JavaScript
-
-2. **HTTPS only:**
-   - Always use HTTPS in production
-   - Tokens should never be transmitted over HTTP
-
-3. **Token expiration:**
-   - Access tokens: Short-lived (15 minutes)
-   - Refresh tokens: Long-lived (7 days)
-
-4. **CORS configuration:**
-   - Whitelist specific origins
-   - Don't use `*` in production
-
-5. **Input validation:**
-   - Always validate on both frontend and backend
-   - Sanitize user inputs
-
----
-
-## Testing with Postman
-
-1. Import the collection (create a Postman collection with all endpoints)
-2. Set environment variables:
-   - `base_url`: `http://localhost:5000/api`
-   - `access_token`: (auto-updated after login)
-   - `refresh_token`: (auto-updated after login)
-
-3. Test flow:
-   - Register → Login → Get User → Refresh Token → Logout
-
----
-
-## License
-
-MIT License - see LICENSE file for details
+## Postman Collection (Optional)
+You can import this ready-made collection:  
+[QuoteVerse API Postman Collection]( https://web.postman.co/workspace/backend-courses~96521b08-be54-4009-81e1-9c86aa937e18/collection/40851069-e3654225-1c0c-498e-842c-5e8aece997a5?action=share&source=copy-link&creator=40851069 )
 
 ---
 
 ## Contributing
+1. Fork → Create feature branch  
+2. Write clean code & tests  
+3. Open Pull Request with clear description  
 
-Pull requests are welcome! Please follow the contribution guidelines.
-
----
-
-## Support
-
-For issues and questions, please open a GitHub issue or contact https://www.oziy.uz
+## License
+MIT © QuoteVerse Team
 
 ---
-
-**Happy Coding! 🚀**
+Made with https://www.oziy.uz for quote lovers everywhere!
