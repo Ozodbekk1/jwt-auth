@@ -5,7 +5,7 @@ A modern RESTful API for a quote-sharing social platform built with Node.js, Exp
 
 ## Base URL
 ```
-https://your-domain.com/api/v1
+
 ```
 (or `http://localhost:5000/api/v1` in development)
 
