@@ -5,6 +5,7 @@ A modern RESTful API for a quote-sharing social platform built with Node.js, Exp
 
 ## Base URL
 ```
+https://jwt-auth-quotes-api.vercel.app
 
 ```
 (or `http://localhost:5000/api/v1` in development)
